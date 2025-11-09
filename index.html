@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Sistem Absensi Face Recognition - Kehadiran Modern & Aman</title>
+    <meta
+      name="description"
+      content="Sistem absensi modern dengan teknologi face recognition dan liveness detection. Catat kehadiran karyawan secara otomatis, aman, dan akurat dengan pengenalan wajah."
+    />
+    <meta
+      name="keywords"
+      content="absensi, face recognition, pengenalan wajah, kehadiran karyawan, liveness detection, absensi online"
+    />
+    <meta name="author" content="Face Recognition Attendance System" />
+    <link
+      rel="canonical"
+      href="https://lovable.dev/projects/4d3d6231-df51-45dc-8175-add023e515e7"
+    />
+
+    <meta
+      property="og:title"
+      content="Sistem Absensi Face Recognition - Kehadiran Modern & Aman"
+    />
+    <meta
+      property="og:description"
+      content="Absensi modern dengan teknologi pengenalan wajah dan liveness detection untuk keamanan maksimal. Daftar gratis sekarang!"
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:image"
+      content="https://lovable.dev/opengraph-image-p98pqg.png"
+    />
+    <meta
+      property="og:url"
+      content="https://lovable.dev/projects/4d3d6231-df51-45dc-8175-add023e515e7"
+    />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sistem Absensi Face Recognition" />
+    <meta
+      name="twitter:description"
+      content="Sistem absensi modern dengan face recognition dan liveness detection"
+    />
+    <meta
+      name="twitter:image"
+      content="https://lovable.dev/opengraph-image-p98pqg.png"
+    />
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <!-- ✅ FaceIO Modal Container - WAJIB sebelum script fio.js -->
+    <div id="faceio-modal"></div>
+    
+    <!-- ✅ FaceIO SDK - Load sebelum </body> sesuai dokumentasi -->
+    <script src="https://cdn.faceio.net/fio.js"></script>
+
+    <!-- React App Entry Point -->
+    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Error Handler untuk FaceIO -->
+    <script>
+      window.addEventListener(
+        "error",
+        function (e) {
+          if (
+            e.target.tagName === "SCRIPT" &&
+            e.target.src.includes("faceio.net")
+          ) {
+            console.error("FaceIO SDK gagal dimuat. Periksa koneksi internet.");
+            alert("Gagal memuat FaceIO SDK. Pastikan koneksi internet stabil.");
+          }
+        },
+        true
+      );
+    </script>
+  </body>
+</html>
