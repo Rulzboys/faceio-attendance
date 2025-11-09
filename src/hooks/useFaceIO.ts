@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const FACEIO_APP_ID = "fioa649e";
+const FACEIO_APP_ID = "fioa649e"; // Public ID kamu
 
 interface FaceIOInstance {
   enroll: (options?: any) => Promise<any>;
@@ -22,53 +22,58 @@ export const useFaceIO = () => {
   useEffect(() => {
     const initializeFaceIO = async () => {
       try {
-        // Tunggu hingga fio.js tersedia (sudah di-load via HTML)
-        let attempts = 0;
-        const maxAttempts = 20; // 10 detik maksimal
+        // Tunggu dokumen siap sepenuhnya
+        if (document.readyState !== "complete") {
+          await new Promise((resolve) =>
+            window.addEventListener("load", resolve, { once: true })
+          );
+        }
 
-        while (typeof window.faceIO === "undefined" && attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
+        // Cegah duplikasi script
+        if (!document.querySelector('script[src*="faceio.net"]')) {
+          const script = document.createElement("script");
+          script.src = "https://cdn.faceio.net/fio.js";
+          script.async = true;
+          document.body.appendChild(script);
+
+          await new Promise<void>((resolve, reject) => {
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("Gagal memuat FaceIO SDK"));
+          });
+        }
+
+        // Tunggu SDK benar-benar tersedia
+        let attempts = 0;
+        while (typeof window.faceIO === "undefined" && attempts < 40) {
+          await new Promise((r) => setTimeout(r, 500));
           attempts++;
         }
-
         if (typeof window.faceIO === "undefined") {
+          throw new Error("FaceIO SDK tidak berhasil dimuat (timeout).");
+        }
+
+        // Pastikan container modal ada
+        if (!document.getElementById("faceio-modal")) {
+          const modalDiv = document.createElement("div");
+          modalDiv.id = "faceio-modal";
+          document.body.appendChild(modalDiv);
+        }
+
+        // Validasi App ID
+        if (!/^fio(app_|a)/.test(FACEIO_APP_ID)) {
           throw new Error(
-            "FaceIO SDK tidak tersedia. Pastikan fio.js sudah di-load di HTML."
+            "App ID tidak valid, gunakan ID dari dashboard FaceIO."
           );
         }
 
-        // Validasi modal container
-        const modalContainer = document.getElementById("faceio-modal");
-        if (!modalContainer) {
-          console.warn(
-            "Element #faceio-modal tidak ditemukan. FaceIO mungkin tidak berfungsi optimal."
-          );
-        }
-
-        // Validasi format App ID (sesuai dokumentasi)
-        if (
-          !FACEIO_APP_ID.startsWith("fioapp_") &&
-          !FACEIO_APP_ID.startsWith("fioa")
-        ) {
-          throw new Error(
-            "App ID tidak valid! Pastikan menggunakan format: fioapp_xxx atau fioaxxx"
-          );
-        }
-
-        // Instantiate FaceIO dengan App ID
+        // Inisialisasi
         const fioInstance = new window.faceIO(FACEIO_APP_ID);
         setFaceio(fioInstance);
         setIsLoading(false);
-
-        console.log(
-          "✅ FaceIO berhasil diinisialisasi dengan ID:",
-          FACEIO_APP_ID
-        );
+        console.log("✅ FaceIO siap:", FACEIO_APP_ID);
       } catch (err: any) {
-        console.error("❌ FaceIO initialization error:", err);
-        setError(
-          err.message || "Gagal initialize FaceIO. Cek koneksi internet Anda."
-        );
+        console.error("❌ FaceIO error:", err);
+        setError(err.message || "Gagal inisialisasi FaceIO.");
         setIsLoading(false);
       }
     };
@@ -77,74 +82,41 @@ export const useFaceIO = () => {
   }, []);
 
   const enrollFace = async (payload?: any) => {
-    if (!faceio) {
-      throw new Error("FaceIO belum diinisialisasi. Tunggu beberapa saat.");
-    }
-
+    if (!faceio) throw new Error("FaceIO belum siap. Tunggu sebentar...");
     try {
-      const userInfo = await faceio.enroll({
-        locale: "id", // Bahasa Indonesia
-        payload: payload || {}, // Data tambahan pengguna
-      });
+      const userInfo = await faceio.enroll({ locale: "id", payload });
       return userInfo;
     } catch (err: any) {
-      const errorMessage = handleFaceIOError(err.code || err.errCode);
-      console.error("Enroll error:", errorMessage, err);
-      throw new Error(errorMessage);
+      throw new Error(handleFaceIOError(err.code || err.errCode));
     }
   };
 
   const authenticateFace = async () => {
-    if (!faceio) {
-      throw new Error("FaceIO belum diinisialisasi. Tunggu beberapa saat.");
-    }
-
+    if (!faceio) throw new Error("FaceIO belum siap. Tunggu sebentar...");
     try {
-      const userData = await faceio.authenticate({
-        locale: "id", // Bahasa Indonesia
-      });
+      const userData = await faceio.authenticate({ locale: "id" });
       return userData;
     } catch (err: any) {
-      const errorMessage = handleFaceIOError(err.code || err.errCode);
-      console.error("Authenticate error:", errorMessage, err);
-      throw new Error(errorMessage);
+      throw new Error(handleFaceIOError(err.code || err.errCode));
     }
   };
 
   const handleFaceIOError = (code: number): string => {
-    switch (code) {
-      case 1:
-        return "Akses kamera ditolak. Mohon izinkan akses kamera.";
-      case 2:
-        return "Kamera tidak tersedia atau tidak terdeteksi.";
-      case 3:
-        return "Timeout. Mohon coba lagi.";
-      case 4:
-        return "Wajah tidak terdeteksi. Pastikan wajah Anda terlihat jelas.";
-      case 5:
-        return "Terlalu banyak wajah terdeteksi. Pastikan hanya satu orang di frame.";
-      case 6:
-        return "Liveness detection gagal. Pastikan Anda melakukan gerakan sesuai instruksi.";
-      case 7:
-        return "Wajah tidak terdaftar. Silakan lakukan registrasi terlebih dahulu.";
-      case 8:
-        return "Sesi timeout. Mohon coba lagi.";
-      case 9:
-        return "Wajah sudah terdaftar dengan pengguna lain.";
-      case 10:
-        return "Operasi dibatalkan oleh pengguna.";
-      case 11:
-        return "PIN Code tidak valid atau tidak sesuai.";
-      default:
-        return `Terjadi kesalahan (kode: ${code}). Silakan coba lagi.`;
-    }
+    const errors: Record<number, string> = {
+      1: "Akses kamera ditolak.",
+      2: "Kamera tidak ditemukan.",
+      3: "Timeout. Coba lagi.",
+      4: "Wajah tidak terdeteksi.",
+      5: "Terlalu banyak wajah di frame.",
+      6: "Liveness detection gagal.",
+      7: "Wajah tidak terdaftar.",
+      8: "Sesi timeout.",
+      9: "Wajah sudah terdaftar di akun lain.",
+      10: "Operasi dibatalkan.",
+      11: "PIN Code salah.",
+    };
+    return errors[code] || `Kesalahan tidak dikenal (kode: ${code}).`;
   };
 
-  return {
-    faceio,
-    isLoading,
-    error,
-    enrollFace,
-    authenticateFace,
-  };
+  return { faceio, isLoading, error, enrollFace, authenticateFace };
 };
