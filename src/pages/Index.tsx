@@ -26,9 +26,11 @@ const Index = () => {
                 Mulai Sekarang
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20">
-              Pelajari Lebih Lanjut
-            </Button>
+            <a href="https://wa.me/6283102655384" target="_blank" rel="noopener noreferrer">
+              <Button size="lg" variant="outline" className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/20">
+                Pelajari Lebih Lanjut
+              </Button>
+            </a>
           </div>
         </div>
       </section>
