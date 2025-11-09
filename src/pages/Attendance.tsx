@@ -1,110 +1,177 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, AlertCircle, Scan } from 'lucide-react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
-import { useFaceIO } from '@/hooks/useFaceIO';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, AlertCircle, Scan } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { useFaceIO } from "@/hooks/useFaceIO";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Type definitions untuk mencegah undefined
+interface FaceDescriptor {
+  faceId?: string;
+  [key: string]: any;
+}
+
+interface FaceData {
+  face_descriptor: FaceDescriptor | null;
+}
 
 const Attendance = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { authenticateFace, isLoading: faceIOLoading, error: faceIOError } = useFaceIO();
+  const {
+    authenticateFace,
+    isLoading: faceIOLoading,
+    error: faceIOError,
+  } = useFaceIO();
   const [isProcessing, setIsProcessing] = useState(false);
   const [faceRegistered, setFaceRegistered] = useState<boolean | null>(null);
-  const [attendanceType, setAttendanceType] = useState<'check-in' | 'check-out'>('check-in');
+  const [attendanceType, setAttendanceType] = useState<
+    "check-in" | "check-out"
+  >("check-in");
 
   useEffect(() => {
     if (!loading && !user) {
-      navigate('/auth');
+      navigate("/auth");
     }
   }, [user, loading, navigate]);
 
+  // Gunakan useCallback untuk mencegah re-creation di setiap render
+  const checkFaceRegistration = useCallback(async () => {
+    if (!user?.id) return; // Safe check untuk user.id
+
+    try {
+      const { data, error } = await supabase
+        .from("face_data")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking face registration:", error);
+        setFaceRegistered(false);
+        return;
+      }
+
+      setFaceRegistered(!!data);
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      setFaceRegistered(false);
+    }
+  }, [user?.id]); // Dependency yang aman
+
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       checkFaceRegistration();
     }
-  }, [user]);
-
-  const checkFaceRegistration = async () => {
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('face_data')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error checking face registration:', error);
-      setFaceRegistered(false);
-      return;
-    }
-
-    setFaceRegistered(!!data);
-  };
+  }, [user?.id, checkFaceRegistration]);
 
   const handleAttendance = async () => {
-    if (!user) return;
+    if (!user?.id) {
+      toast({
+        title: "Error",
+        description: "User tidak ditemukan. Silakan login kembali.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsProcessing(true);
 
     try {
-      // FaceIO authentication with liveness detection
+      // FaceIO authentication dengan error handling
       const userData = await authenticateFace();
 
+      // Safe check untuk userData
+      if (!userData || !userData.facialId) {
+        throw new Error("Data wajah tidak valid dari FaceIO");
+      }
+
       // Verify the facialId matches our stored data
-      const { data: faceData } = await supabase
-        .from('face_data')
-        .select('face_descriptor')
-        .eq('user_id', user.id)
+      const { data: faceData, error: fetchError } = await supabase
+        .from("face_data")
+        .select("face_descriptor")
+        .eq("user_id", user.id)
         .single();
 
-      if (!faceData || (faceData.face_descriptor as any).faceId !== userData.facialId) {
+      // Safe check untuk fetchError
+      if (fetchError) {
+        throw new Error("Gagal mengambil data wajah dari database");
+      }
+
+      // Type-safe check dengan multiple validations
+      const typedFaceData = faceData as FaceData | null;
+
+      if (!typedFaceData) {
+        throw new Error("Data wajah tidak ditemukan");
+      }
+
+      if (!typedFaceData.face_descriptor) {
+        throw new Error("Descriptor wajah tidak valid");
+      }
+
+      const storedFaceId = typedFaceData.face_descriptor.faceId;
+
+      if (!storedFaceId) {
+        throw new Error("Face ID tidak ditemukan dalam database");
+      }
+
+      // Safe comparison
+      if (storedFaceId !== userData.facialId) {
         toast({
-          title: 'Wajah tidak cocok',
-          description: 'Wajah yang terdeteksi tidak cocok dengan data yang terdaftar.',
-          variant: 'destructive',
+          title: "Wajah tidak cocok",
+          description:
+            "Wajah yang terdeteksi tidak cocok dengan data yang terdaftar.",
+          variant: "destructive",
         });
         return;
       }
 
       // Record attendance
-      const { error } = await supabase
-        .from('attendance')
-        .insert({
-          user_id: user.id,
-          status: attendanceType,
-          timestamp: new Date().toISOString(),
-        });
+      const { error: insertError } = await supabase.from("attendance").insert({
+        user_id: user.id,
+        status: attendanceType,
+        timestamp: new Date().toISOString(),
+      });
 
-      if (error) throw error;
+      if (insertError) throw insertError;
 
       toast({
-        title: 'Absensi berhasil!',
-        description: `${attendanceType === 'check-in' ? 'Check-in' : 'Check-out'} telah tercatat dengan FaceIO.`,
+        title: "Absensi berhasil!",
+        description: `${
+          attendanceType === "check-in" ? "Check-in" : "Check-out"
+        } telah tercatat dengan FaceIO.`,
       });
 
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate("/dashboard");
       }, 1500);
     } catch (error: any) {
+      console.error("Attendance error:", error);
       toast({
-        title: 'Error',
-        description: error.message || 'Gagal mencatat absensi. Silakan coba lagi.',
-        variant: 'destructive',
+        title: "Error",
+        description:
+          error?.message || "Gagal mencatat absensi. Silakan coba lagi.",
+        variant: "destructive",
       });
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // Loading state dengan safe checks
   if (loading || faceRegistered === null || faceIOLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -126,14 +193,22 @@ const Attendance = () => {
             </div>
             <CardTitle className="text-center">Wajah Belum Terdaftar</CardTitle>
             <CardDescription className="text-center">
-              Anda perlu mendaftarkan wajah terlebih dahulu sebelum melakukan absensi.
+              Anda perlu mendaftarkan wajah terlebih dahulu sebelum melakukan
+              absensi.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button className="w-full" onClick={() => navigate('/register-face')}>
+            <Button
+              className="w-full"
+              onClick={() => navigate("/register-face")}
+            >
               Daftar Wajah Sekarang
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => navigate('/dashboard')}>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate("/dashboard")}
+            >
               Kembali ke Dashboard
             </Button>
           </CardContent>
@@ -147,7 +222,7 @@ const Attendance = () => {
       <div className="container mx-auto px-4 py-8">
         <Button
           variant="ghost"
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate("/dashboard")}
           className="mb-6"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -172,18 +247,26 @@ const Attendance = () => {
               <Label>Jenis Absensi</Label>
               <RadioGroup
                 value={attendanceType}
-                onValueChange={(value) => setAttendanceType(value as 'check-in' | 'check-out')}
+                onValueChange={(value) =>
+                  setAttendanceType(value as "check-in" | "check-out")
+                }
                 className="flex gap-4"
               >
                 <div className="flex items-center space-x-2 flex-1">
                   <RadioGroupItem value="check-in" id="check-in" />
-                  <Label htmlFor="check-in" className="cursor-pointer flex-1 p-3 border rounded-lg">
+                  <Label
+                    htmlFor="check-in"
+                    className="cursor-pointer flex-1 p-3 border rounded-lg"
+                  >
                     Check-in (Masuk)
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2 flex-1">
                   <RadioGroupItem value="check-out" id="check-out" />
-                  <Label htmlFor="check-out" className="cursor-pointer flex-1 p-3 border rounded-lg">
+                  <Label
+                    htmlFor="check-out"
+                    className="cursor-pointer flex-1 p-3 border rounded-lg"
+                  >
                     Check-out (Keluar)
                   </Label>
                 </div>
@@ -196,7 +279,8 @@ const Attendance = () => {
                 FaceIO Authentication
               </h3>
               <p className="text-sm text-muted-foreground">
-                Klik tombol di bawah untuk memulai scan wajah dengan liveness detection
+                Klik tombol di bawah untuk memulai scan wajah dengan liveness
+                detection
               </p>
             </div>
 
@@ -222,7 +306,8 @@ const Attendance = () => {
             </div>
 
             <p className="text-xs text-muted-foreground text-center">
-              Sistem menggunakan FaceIO dengan liveness detection untuk verifikasi keamanan
+              Sistem menggunakan FaceIO dengan liveness detection untuk
+              verifikasi keamanan
             </p>
           </CardContent>
         </Card>
