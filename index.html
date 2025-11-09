@@ -8,8 +8,12 @@
   <body>
     <div id="root"></div>
     <div id="faceio-modal"></div>
+    <script src="https://cdn.faceio.net/fio.js"></script>
+    <script type="text/javascript">
+      // Buat fio.js dengan ID Publik aplikasi Anda dan jadikan global
+      window.faceio = new faceIO("fioa649e");
+    </script>
 
-    <!-- ⚡ Tidak perlu script fio.js di sini (akan diload dari hook) -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

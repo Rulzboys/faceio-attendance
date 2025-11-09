@@ -11,6 +11,7 @@ interface FaceIOInstance {
 declare global {
   interface Window {
     faceIO: any;
+    faceio: FaceIOInstance;
   }
 }
 
@@ -22,53 +23,19 @@ export const useFaceIO = () => {
   useEffect(() => {
     const initializeFaceIO = async () => {
       try {
-        // Tunggu dokumen siap sepenuhnya
-        if (document.readyState !== "complete") {
-          await new Promise((resolve) =>
-            window.addEventListener("load", resolve, { once: true })
-          );
-        }
-
-        // Cegah duplikasi script
-        if (!document.querySelector('script[src*="faceio.net"]')) {
-          const script = document.createElement("script");
-          script.src = "https://cdn.faceio.net/fio.js";
-          script.async = true;
-          document.body.appendChild(script);
-
-          await new Promise<void>((resolve, reject) => {
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error("Gagal memuat FaceIO SDK"));
-          });
-        }
-
-        // Tunggu SDK benar-benar tersedia
+        // Tunggu instance global faceio dari index.html
         let attempts = 0;
-        while (typeof window.faceIO === "undefined" && attempts < 40) {
+        while (typeof window.faceio === "undefined" && attempts < 40) {
           await new Promise((r) => setTimeout(r, 500));
           attempts++;
         }
-        if (typeof window.faceIO === "undefined") {
+
+        if (typeof window.faceio === "undefined") {
           throw new Error("FaceIO SDK tidak berhasil dimuat (timeout).");
         }
 
-        // Pastikan container modal ada
-        if (!document.getElementById("faceio-modal")) {
-          const modalDiv = document.createElement("div");
-          modalDiv.id = "faceio-modal";
-          document.body.appendChild(modalDiv);
-        }
-
-        // Validasi App ID
-        if (!/^fio(app_|a)/.test(FACEIO_APP_ID)) {
-          throw new Error(
-            "App ID tidak valid, gunakan ID dari dashboard FaceIO."
-          );
-        }
-
-        // Inisialisasi
-        const fioInstance = new window.faceIO(FACEIO_APP_ID);
-        setFaceio(fioInstance);
+        // Gunakan instance yang sudah dibuat di index.html
+        setFaceio(window.faceio);
         setIsLoading(false);
         console.log("✅ FaceIO siap:", FACEIO_APP_ID);
       } catch (err: any) {
